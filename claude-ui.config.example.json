@@ -1,0 +1,30 @@
+{
+  "_说明": "把它复制成 claude-ui.config.json 就生效；**一个字段都不写也能跑**（全自动探测）。这个文件本身不用改。",
+
+  "cc_exe": "",
+  "_cc_exe": "claude 可执行文件的全路径。留空 = 自动找（PATH → %LOCALAPPDATA%\\Programs\\claude\\ → npm 全局）。",
+
+  "cc_cwd": "",
+  "_cc_cwd": "Claude Code 的工作目录（它读哪个文件夹的 CLAUDE.md）。留空 = 你的用户主目录。",
+
+  "cc_resume": "",
+  "_cc_resume": "要接的会话 id。留空 = 每次开新会话。",
+
+  "memory_dir": "",
+  "_memory_dir": "记忆库目录（界面里「我要休息 / 上下文满了」会往里写东西）。留空 = 按 cc_cwd 自动推。",
+
+  "cite": true,
+  "_cite": "要不要教模型在结论末尾写 [[eN]] 依据角标。关掉可以省掉一次缓存前缀（见 README）。",
+
+  "host": "127.0.0.1",
+  "port": 8765,
+  "_port": "本地服务端口。改了的话 launch.vbs 里也要一起改。",
+
+  "window": {
+    "width": 1420,
+    "height": 840,
+    "x": null,
+    "y": null
+  },
+  "_window": "窗口尺寸和位置。x/y 写 null = 交给系统层叠；不写 = 默认 (16, 8)。超出屏幕会自动夹回来。"
+}

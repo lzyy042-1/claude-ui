@@ -1,0 +1,189 @@
+/* ────────────────────────────────────────────────────────────────
+ * claude-ui 的「画布」附加模块 —— 样式
+ *
+ * 从 index.html 的 <style> 里整块搬出来的，规则一条没改，只是换了位置。
+ * 用的是本体的 CSS 变量（--cyn / --bg / --bg2 / --line / --mono …），
+ * 所以这个文件要在本体的样式**之后**加载（index.html 里就是这么放的）。
+ * ──────────────────────────────────────────────────────────────── */
+
+  /* ── 画布 ── */
+  .cvs{
+    position:relative; width:100%; height:100%; overflow:hidden; background-color:var(--bg);
+    touch-action:none;        /* 手势自己接管，别让浏览器抢（画布区本来也不需要滚动） */
+  }
+  .cvs.pan{cursor:grab}
+  .cvs.pan:active{cursor:grabbing}
+  /* ── 比例尺 ──
+     挂在视口层（不是 plane），所以它自己不受缩放影响；
+     缩放时只换"线画多长"和"数字写多少"。 */
+  .scalebar{
+    position:absolute; left:12px; bottom:12px; pointer-events:none; z-index:20;
+    display:flex; align-items:flex-end; gap:6px;
+  }
+  .scalebar .sbline{
+    height:7px; border-left:1px solid var(--fg3); border-right:1px solid var(--fg3);
+    border-bottom:1px solid var(--fg3); box-sizing:border-box;
+  }
+  .scalebar .sblabel{color:var(--fg3); font-size:10px; letter-spacing:.5px; line-height:1}
+
+  /* ── 工作区（2026-10-07 大改：任意形状 + 任意数量）────────────────
+     蒙版走 **SVG mask**：一层白底挖 N 个洞 ⇒ 洞露出来、其余盖 98%。
+     洞的形状随便（矩形/圆/多边形/套索）、**重叠也没事** —— 重叠只是"还是洞"。
+     旧的「一个矩形 + 巨大 box-shadow」天生排他（A 盖 B、B 盖 A ⇒ 全黑），已弃。 */
+  .wssvg{
+    position:absolute; inset:0; width:100%; height:100%;
+    pointer-events:none; z-index:9; display:none;
+  }
+  .wssvg.on{display:block}
+  .wssvg .wscover{fill:rgba(5,8,12,.98)}          /* 浓度 98% —— 他定的 */
+  #wsShapes > *{fill:rgba(86,212,221,.10); stroke:var(--cyn); stroke-width:1}
+  #wsShapes > .wslive{stroke-dasharray:4 3}       /* 正在画的那个：虚线 */
+  #wsShapes > .wsfirstpt{fill:var(--cyn); stroke:none}   /* 多边形的起点：点它就闭合 */
+  #wsShapes > .wspreview{fill:none; stroke:var(--cyn); stroke-width:1; stroke-dasharray:3 3; opacity:.55}
+
+  /* 工作区的小标记 —— 挂视口层。
+     · **缩起来的**：原地一个图标「◈ 工作区 #N」+ ×（点图标就打开）
+     · **打开着的**：不挂图标（它已经展开成那块地方了），只在右上角挂个 × */
+  .wsui{position:absolute; inset:0; pointer-events:none; z-index:12}   /* 在批注层之上 */
+  /* 图标**常驻**在包围盒左上角外侧 —— 点它开、再点它关（可以反复点）。
+     （原来只在缩起时才挂图标，打开后图标没了，就"点不开第二次"了） */
+  .wsitem{position:absolute; display:flex; align-items:center; gap:3px;
+          pointer-events:none; transform:translate(0,-100%)}
+  .wsbadge{
+    pointer-events:auto; cursor:pointer; white-space:nowrap;
+    color:var(--cyn); font-size:10px; letter-spacing:1px;
+    background:var(--bg2); border:1px solid var(--cyn); padding:1px 6px;
+  }
+  .wsbadge:hover{background:rgba(86,212,221,.14)}
+  .wsbadge.on{background:rgba(255,255,255,.13)}   /* 正开着的那个：底亮起来（颜色各随其工作区） */
+  .wsdel{
+    pointer-events:auto; cursor:pointer; flex:0 0 auto;
+    width:15px; height:15px; line-height:13px; text-align:center;
+    color:var(--fg3); background:var(--bg2); border:1px solid var(--line2);
+    font-size:11px; font-family:var(--mono);
+  }
+  .wsdel:hover{color:var(--red); border-color:var(--red)}
+
+  /* ── 工作区管理面板（右栏，挂会话下面）────────────────────────
+     一行 = 一个工作区：色点 · 名字（点一下改）· 关键词（点一下删，「+」加）· × 删掉  */
+  .wsrow{display:flex; align-items:center; gap:6px; padding:3px 5px;
+         border-bottom:1px solid var(--line); font-size:11px}
+  .wsrow:hover{background:rgba(255,255,255,.03)}
+  .wsdot{width:10px; height:10px; border-radius:50%; flex:0 0 auto; cursor:pointer;
+         border:1px solid rgba(255,255,255,.22)}
+  .wsname{flex:1 1 auto; min-width:0; color:var(--fg2); cursor:pointer;
+          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; outline:none}
+  .wsname:focus{color:var(--fg); background:var(--bg3); padding:0 2px}
+  .wstg{font-size:9px; color:var(--fg3); border:1px solid var(--line2); padding:0 4px;
+        cursor:pointer; flex:0 0 auto}
+  .wstg:hover{color:var(--red); border-color:var(--red)}
+  .wstg.add{color:var(--cyn); border-color:var(--cyn); border-style:dashed}
+  .wstg.add:hover{color:var(--cyn); border-color:var(--cyn)}
+  .wstg.edit{outline:none; color:var(--fg); background:var(--bg3); cursor:text;
+             border-style:solid; border-color:var(--cyn); min-width:44px}
+  .wsrowx{color:var(--fg3); cursor:pointer; padding:0 3px; flex:0 0 auto}
+  .wsrowx:hover{color:var(--red)}
+  /* 工作区形状的展开层：平时收着，点「工作区」才露出来 */
+  .wsmenu{display:none; gap:2px; align-items:center}
+  .wsmenu.on{display:flex}
+  /* 工具条上的「选好了」—— 有未确认的工作区时才出现（原来贴着工作区跑，会飘） */
+  .tool.wsdone{border-color:var(--cyn); color:var(--cyn); margin-left:2px}
+  .tool.wsdone:hover{background:rgba(86,212,221,.12)}
+  .tool[hidden]{display:none}
+  /* 调试面板（临时的，按 ` 开关） */
+  .wsdbg{
+    position:absolute; right:8px; top:8px; z-index:30; display:none;
+    font-family:var(--mono); font-size:10px; line-height:1.7; color:var(--fg2);
+    background:rgba(5,8,12,.94); border:1px solid var(--line2); padding:6px 9px;
+    white-space:pre; pointer-events:none; letter-spacing:.3px;
+  }
+  .wsdbg.on{display:block}
+  .wsdbg b{color:var(--cyn); font-weight:normal}
+  /* 状态牌：在不在工作区里，一眼可见（不然最容易踩空的一步） */
+  .wsmode{
+    position:absolute; left:10px; top:8px; z-index:21; pointer-events:none;
+    color:var(--cyn); font-size:11px; letter-spacing:.5px;
+    background:rgba(5,8,12,.92); border:1px solid var(--cyn); padding:2px 8px;
+  }
+  /* （原来的 .wsask 浮动问句已删 —— 2026-10-07 改成工具条上的「选好了」） */
+
+  /* ── 导出对话框（切回普通画布时弹，居中） ── */
+  .exask{
+    position:fixed; inset:0; z-index:950; display:none;
+    align-items:center; justify-content:center; background:rgba(5,8,12,.72);
+  }
+  .exask.on{display:flex}
+  .exask .exbox{
+    min-width:420px; background:var(--bg2); border:1px solid var(--cyn);
+    padding:16px 18px; box-shadow:0 12px 48px rgba(0,0,0,.7);
+  }
+  .exask .exrow{display:flex; align-items:center; gap:8px; margin:7px 0}
+  .exask .extitle{color:var(--cyn); font-size:12px; letter-spacing:1.5px; margin-bottom:12px}
+  .exask .exlab{flex:0 0 40px; color:var(--fg3); font-size:10px; letter-spacing:1px}
+  .exask .exinp{
+    flex:1; font-family:var(--mono); font-size:11px; padding:3px 7px;
+    background:var(--bg3); border:1px solid var(--line2); color:var(--fg); outline:none;
+  }
+  .exask .exinp:focus{border-color:var(--cyn)}
+  .exask .exchip{
+    font-size:10.5px; padding:3px 9px; cursor:pointer; letter-spacing:.5px;
+    background:var(--bg3); border:1px solid var(--line2); color:var(--fg2);
+  }
+  .exask .exchip:hover{border-color:var(--fg2); color:var(--fg)}
+  .exask .exchip.on{border-color:var(--cyn); color:var(--cyn)}
+  .exask .exbtns{justify-content:flex-end; margin-top:14px}
+  /* ── 内容层（2026-10-07 加）：涂鸦和图片对象都住在这个坐标系里。
+     缩放/平移只给它上 transform，视口 .cvs 本身不动。
+     ⚠️ 网格也挂这层 —— 跟着 transform 一起缩放平移，"无限画布"的感觉就是这么来的。
+     ⚠️ 尺寸是**逻辑坐标**，同时就是涂鸦 viewBox 的坐标系。涂鸦层**不能**再用
+        getBoundingClientRect 量尺寸：那给的是变换**之后**的值，一缩放笔迹就被缩两次。 */
+  .plane{
+    /* ⚠️ left/top 是负的：把**画布原点 (0,0)** 摆到 plane 的正中间。
+       不这样的话边界就贴着原点，内容一居中、或者一缩小，角上立刻露白（实测踩过）。
+       transform-origin 取 plane 内 (4000,3000) —— 那正是画布原点 ——
+       于是 V.tx/ty 的含义不变（还是"画布原点在屏幕上的位置"）。 */
+    position:absolute; left:-4000px; top:-3000px; width:8000px; height:6000px;
+    transform-origin:4000px 3000px;
+    background-image:
+      repeating-linear-gradient(0deg, transparent 0 23px, var(--line) 23px 24px),
+      repeating-linear-gradient(90deg, transparent 0 23px, var(--line) 23px 24px);
+  }
+  /* 批注层：跟 .plane 一模一样，只是**盖在蒙版上面**（蒙版是 z-index 9）。
+     pointer-events:none —— 交互还是走下面那层 #ink，别抢。 */
+  .plane2{
+    position:absolute; left:-4000px; top:-3000px; width:8000px; height:6000px;
+    transform-origin:4000px 3000px;
+    z-index:10; pointer-events:none;
+  }
+  .cvobj{
+    position:absolute; border:1px solid var(--line2); background:var(--bg2);
+    box-shadow:0 2px 12px rgba(0,0,0,.55); cursor:move;
+  }
+  .cvobj:hover{border-color:var(--cyn)}
+  .cvobj img{display:block; width:100%; height:auto; pointer-events:none; -webkit-user-drag:none}
+  /* 涂鸦层：垫在图片对象下面（一条笔迹 = 一个 <g>，以后「框=声明对象」就靠它） */
+  .ink{position:absolute; inset:0; width:100%; height:100%; touch-action:none; cursor:crosshair}
+  .ink.erase{cursor:cell}
+  .ink path{fill:none; stroke:var(--fg); stroke-linecap:round; stroke-linejoin:round}
+  /* 工作区里画的笔（= 批注）：换个颜色 —— 一眼分得出哪笔是原稿、哪笔是后加的。
+     ⚠️ 要排在 .hit 前面，不然橡皮高亮（红）会被它盖住。 */
+  .ink g.wsink path{stroke:var(--inkcol, var(--cyn))}
+  .ink g.erasing{opacity:.25}
+  /* 橡皮的反馈：悬停时告诉你这一下会擦掉哪一笔 */
+  .ink g.hit path{stroke:var(--red); filter:drop-shadow(0 0 3px rgba(255,123,114,.75))}
+  /* 画布头里的小工具 */
+  .tool{border:1px solid var(--line); color:var(--fg3); padding:0 5px; cursor:pointer;
+        font-size:10px; letter-spacing:0; text-transform:none}
+  .tool:hover{border-color:var(--fg2); color:var(--fg2)}
+  .tool.on{border-color:var(--cyn); color:var(--cyn)}
+  .cvobj .x{
+    position:absolute; top:-1px; right:-1px; width:14px; height:14px; line-height:12px;
+    text-align:center; font-size:11px; color:var(--fg3); background:var(--bg3);
+    border:1px solid var(--line2); cursor:pointer; display:none;
+  }
+  .cvobj:hover .x{display:block}
+  .cvobj .x:hover{color:var(--red); border-color:var(--red)}
+  .cvsnote{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    color:var(--fg3); font-size:11px; text-align:center; line-height:2; pointer-events:none;
+  }

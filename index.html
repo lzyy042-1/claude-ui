@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>CLAUDE // CONSOLE</title>
+<style>
+  :root{
+    --bg:#0a0d12; --bg2:#0e131a; --bg3:#131a23;
+    --line:#1b2530; --line2:#26323f;
+    --fg:#c6d0da; --fg2:#7d8b99; --fg3:#4a5764;
+    --grn:#7ee787; --cyn:#56d4dd; --amb:#ffd866; --red:#ff7b72; --vio:#b392f0;
+    --mono:'Cascadia Mono','JetBrains Mono',Consolas,'Courier New',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--fg); font-family:var(--mono);
+    font-size:12px; line-height:1.55; overflow:hidden;
+    display:flex; flex-direction:column;
+  }
+  /* ── 顶栏 ── */
+  .topbar{
+    height:26px; flex:0 0 26px; display:flex; align-items:center;
+    background:var(--bg2); border-bottom:1px solid var(--line);
+    padding:0 10px; gap:14px; font-size:11px;
+  }
+  .brand{color:var(--grn); letter-spacing:1px}
+  .brand b{background:var(--grn); color:var(--bg); padding:0 4px; margin-right:4px}
+  .topbar .sp{flex:1}
+  .topbar .k{color:var(--fg3)}
+  .topbar .v{color:var(--fg2)}
+  .dot{color:var(--grn)}
+  /* ── 主体三栏 ── */
+  .main{flex:1; display:flex; min-height:0}
+  .col{display:flex; flex-direction:column; min-height:0}
+  .col.left{width:300px; flex:0 0 300px; border-right:1px solid var(--line)}
+  .col.mid{flex:1; min-width:0}
+  .col.right{width:250px; flex:0 0 250px; border-left:1px solid var(--line)}
+  .hdr{
+    height:22px; flex:0 0 22px; display:flex; align-items:center; gap:8px;
+    padding:0 8px; background:var(--bg2); border-bottom:1px solid var(--line);
+    font-size:10px; letter-spacing:1.5px; color:var(--fg3); text-transform:uppercase;
+  }
+  .hdr .sp{flex:1}
+  .hdr .cnt{color:var(--fg3)}
+  /* 面板 = 头 + 身，能整块在三栏之间搬家（画布模式靠搬 DOM 实现） */
+  .panel{display:flex; flex-direction:column; min-height:0; flex:1}
+  .panel[hidden]{display:none}
+  .body{flex:1; overflow-y:auto; min-height:0}
+
+  /* ── 画布模式的「精简状态」：只留 CPU / 内存 / 费用 ── */
+  #pStat.mini .g-ctx, #pStat.mini .g-run, #pStat.mini .hr,
+  #pStat.mini .hw-net, #pStat.mini .hw-bat{display:none}
+  #pStat.mini .grp{margin-top:8px}
+
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:var(--line2)}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  /* ── 左：过程流 ── */
+  .log{padding:4px 0}
+  .li{
+    display:flex; gap:6px; padding:1px 8px; white-space:nowrap;
+    border-left:2px solid transparent;
+  }
+  .li .t{color:var(--fg3); flex:0 0 52px}
+  .li .ic{flex:0 0 12px; text-align:center}
+  .li .m{overflow:hidden; text-overflow:ellipsis; color:var(--fg2)}
+  .li.hl{background:#16202b; border-left-color:var(--grn)}
+  .li.hl .m{color:var(--fg)}
+  .li .m b{color:var(--fg); font-weight:400}
+  .g{color:var(--grn)} .c{color:var(--cyn)} .a{color:var(--amb)}
+  .r{color:var(--red)} .v{color:var(--vio)} .d{color:var(--fg3)}
+  .sub{padding-left:26px; color:var(--fg3); white-space:nowrap; font-size:11px}
+
+  /* ── 左下：原始日志 ── */
+  .rawlog{font-size:10.5px; line-height:1.5}
+  .rawlog .li{padding:0 8px; gap:5px}
+  .rawlog .li .t{flex:0 0 62px; color:#33404d}
+  .rawlog .li .m{color:#5b6875}
+  .rawlog .tag{color:#3d4a57}
+  .rawlog .ok{color:#4e7a55}
+  .rawlog .wr{color:#7a6a3d}
+  .rawlog .er{color:#8a4f4a}
+  .rawlog .cy{color:#3d6b70}
+  .rawlog .li.hl{background:#16202b; border-left-color:var(--cyn)}
+
+  /* ── 中：对话 ── */
+  .chat{padding:10px 16px}
+  .msg{margin-bottom:14px}
+  .who{font-size:10px; letter-spacing:1.5px; margin-bottom:4px}
+  .who.u{color:var(--cyn)}
+  .who.a{color:var(--grn)}
+  .bubble-u{
+    border-left:2px solid var(--cyn); padding-left:10px; color:var(--fg);
+  }
+  .a-body{color:var(--fg); max-width:78ch}
+  .a-body h4{font-weight:400; color:var(--fg); margin:10px 0 4px; font-size:12px}
+  .a-body p{margin:4px 0; color:var(--fg2)}
+  .a-body p b{color:var(--fg); font-weight:400}
+  .ref, .cite{
+    display:inline-block; min-width:14px; text-align:center;
+    background:#16202b; border:1px solid var(--line2); color:var(--cyn);
+    font-size:10px; padding:0 3px; margin-left:3px; cursor:pointer;
+    vertical-align:1px;
+  }
+  .ref:hover, .cite:hover{background:var(--cyn); color:var(--bg); border-color:var(--cyn)}
+  .ref.on, .cite.on{background:var(--grn); color:var(--bg); border-color:var(--grn)}
+  /* 正文里那个角标（[[eN]] 渲染出来的）—— 加对方括号，跟正文区分开 */
+  .cite::before{content:'['} .cite::after{content:']'}
+  .step{
+    display:inline-flex; gap:6px; align-items:center; color:var(--fg3);
+    border:1px solid var(--line); padding:1px 6px; margin:2px 4px 8px 0; font-size:11px;
+  }
+  .step .n{color:var(--fg2)}
+
+  /* ── 右：状态 ── */
+  .stat{padding:8px 10px}
+  .grp{margin-bottom:12px}
+  .grp .gt{font-size:10px; color:var(--fg3); letter-spacing:1.5px; margin-bottom:5px}
+  .row{display:flex; justify-content:space-between; gap:8px; padding:1px 0}
+  .row .l{color:var(--fg3)}
+  .row .r2{color:var(--fg)}
+  .bar{height:6px; background:var(--bg3); margin:3px 0 5px; display:flex}
+  .bar i{display:block; height:100%}
+  .hr{border-top:1px solid var(--line); margin:10px 0}
+  .kv{display:flex; justify-content:space-between; padding:1px 0}
+  .hi{color:var(--grn)} .warn{color:var(--amb)} .bad{color:var(--red)}
+
+  /* ── 温度卡：柱 + 折线重叠 ── */
+  .chart-card{
+    border:1px solid var(--line); background:var(--bg2);
+    padding:6px 8px 4px; margin:0 0 12px;
+  }
+  .chart-card .ct{display:flex; align-items:center; gap:6px; font-size:10px; letter-spacing:1.5px; color:var(--fg3); margin-bottom:4px}
+  .chart-card .ct .now{margin-left:auto; font-size:12px; letter-spacing:0; color:var(--amb)}
+  .chart-card .lg{display:inline-flex; align-items:center; gap:3px; letter-spacing:0; color:#5b6875}
+  .chart-card .sw-bar{width:7px; height:7px; background:#1e3a4a; display:inline-block}
+  .chart-card .sw-line{width:10px; height:0; border-top:1.5px solid var(--amb); display:inline-block}
+  .chart-card svg{display:block; width:100%; height:58px}
+  .chart-card .cf{display:flex; justify-content:space-between; font-size:9.5px; color:#3d4a57; margin-top:3px}
+
+  /* ── 底：输入 ── */
+  .inbar{
+    flex:0 0 auto; border-top:1px solid var(--line); background:var(--bg2);
+  }
+  .inrow{display:flex; align-items:flex-end; gap:8px; padding:6px 12px}
+  .inrow .p{color:var(--grn); line-height:1.5}
+  /* 多行输入框（2026-10-08 从 <input> 换成 <textarea>）——
+     单行 <input> 装不了 \n，"换行"这个动作以前根本不存在。
+     高度由 JS 的 growInp() 跟着内容长，封顶 INP_MAX（96px，再多就自己滚）。 */
+  .inrow textarea{
+    flex:1; display:block; background:transparent; border:0; outline:0; resize:none;
+    color:var(--fg); font-family:var(--mono); font-size:12px; line-height:1.5;
+    padding:0; margin:0; min-height:18px; max-height:96px; overflow-y:auto;
+  }
+  .inrow textarea::placeholder{color:var(--fg3)}
+  .stopbtn{
+    background:transparent; border:1px solid var(--line2); color:var(--fg3);
+    font-family:var(--mono); font-size:10.5px; padding:2px 10px; cursor:pointer; letter-spacing:1px;
+  }
+  .stopbtn:hover{border-color:var(--red); color:var(--red)}
+  .modes{display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:0 12px 6px; font-size:10px}
+  /* 这行右端的"钉子"：margin-left:auto 把它顶到最右。
+     放键位提示 —— 这里是你手指要敲键盘时会看的地方（2026-10-08 他点名要的）。 */
+  .mhint{margin-left:auto; color:var(--fg3); letter-spacing:.5px; cursor:default;
+         -webkit-user-select:none; user-select:none}
+
+  /* ── 附件卡片：拖进来的文件显示成"它本来的样子"（Word 就 Word 的图标）──
+     图标由后端 /file-icon/<ext> 取系统图标；取不到时前端退回一个色块（.fb）。 */
+  .afile{display:inline-flex; align-items:center; gap:5px; max-width:230px;
+         border:1px solid var(--line2); color:var(--fg2); padding:0 2px 0 3px; cursor:default}
+  .afile img.ic{width:13px; height:13px; display:block; flex:0 0 auto}
+  .afile .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .afile .x{color:var(--fg3); cursor:pointer; padding:0 2px; flex:0 0 auto}
+  .afile .x:hover{color:var(--red)}
+  .afile .fb{width:13px; height:13px; flex:0 0 auto; display:flex; align-items:center;
+             justify-content:center; background:#1e3a4a; color:var(--cyn); font-size:7px}
+  .mode{border:1px solid var(--line); color:var(--fg3); padding:0 5px; cursor:default}
+  .mode.on{border-color:var(--cyn); color:var(--cyn)}
+  .mode[data-act]{cursor:pointer}
+  .mode[data-act]:hover{border-color:var(--fg2); color:var(--fg2)}
+  .mode[data-act].on,.mode[data-act].on:hover{border-color:var(--red); color:var(--red)}
+  .mode.na{opacity:.45}
+  /* 框选遮罩层 */
+  .shotov{position:fixed; inset:0; z-index:90; background:rgba(0,0,0,.9);
+          display:flex; align-items:center; justify-content:center; cursor:crosshair}
+  .shotov[hidden]{display:none}
+  .shotov img{display:block; user-select:none; -webkit-user-drag:none; max-width:96vw; max-height:92vh}
+  .shotsel{position:absolute; border:1px solid var(--cyn); background:rgba(86,212,221,.16);
+           pointer-events:none; box-shadow:0 0 0 9999px rgba(0,0,0,.35)}
+  .shothint{position:absolute; top:10px; left:50%; transform:translateX(-50%);
+            font-size:11px; color:var(--fg2); background:rgba(10,13,18,.9);
+            border:1px solid var(--line2); padding:3px 10px}
+
+  /* ── 右栏：收尾按钮 ── */
+  /* ⚠️ 必须限定在 .acts 里 —— 底栏那几个 chip 也带 act（那是另一个意思），
+     不限定的话它们会被这里撑成 flex:1 的等分大格子。2026-10-08 踩过。 */
+  .acts{display:flex; gap:6px; margin-top:9px}
+  .acts .act{
+    flex:1; background:transparent; border:1px solid var(--line2); color:var(--fg2);
+    font-family:var(--mono); font-size:10.5px; padding:5px 0; cursor:pointer; letter-spacing:.5px;
+  }
+  .acts .act:hover{border-color:var(--cyn); color:var(--cyn)}
+  .acts .act:disabled{opacity:.35; cursor:default}
+  .acts .act:disabled:hover{border-color:var(--line2); color:var(--fg2)}
+  .actState{margin-top:6px; font-size:10px; line-height:1.5; color:var(--amb); min-height:14px}
+  .actState.ok{color:var(--grn)}
+  .actState.er{color:var(--red)}
+
+  /* ── 结论挂依据 ── */
+  .steps{display:flex; flex-wrap:wrap; gap:4px; margin:7px 0 2px; align-items:center}
+  .steps::before{content:'依据'; color:var(--fg3); font-size:10px; letter-spacing:1.5px; margin-right:2px}
+
+  /* ── 回复里的 markdown ── */
+  .a-body > div{margin:3px 0}
+  .a-body .sp{height:7px}
+  .a-body .li2{color:var(--fg2); padding-left:8px}
+  .a-body pre{
+    background:var(--bg3); border:1px solid var(--line); padding:6px 9px; margin:7px 0;
+    overflow-x:auto; font-size:11px; color:var(--fg2); white-space:pre;
+  }
+  .a-body code{background:var(--bg3); color:var(--cyn); padding:0 3px; font-size:11.5px}
+  .a-body pre code{background:none; padding:0; color:inherit}
+  .a-body b{color:var(--fg); font-weight:400}
+  /* ── 上下文水位告警（到 900k 弹一次）────────────────────────── */
+  #ctxWarn{position:fixed; inset:0; z-index:900; display:none;
+           align-items:center; justify-content:center; background:rgba(5,8,12,.78)}
+  #ctxWarn.on{display:flex}
+  #ctxWarn .cwbox{max-width:520px; padding:16px 18px; background:var(--bg2);
+                  border:1px solid var(--red);
+                  box-shadow:0 0 0 1px rgba(255,123,114,.22), 0 10px 44px rgba(0,0,0,.7)}
+  #ctxWarn .cwt{color:var(--red); font-size:13px; letter-spacing:1.5px; margin-bottom:10px}
+  #ctxWarn .cwm{color:var(--fg2); font-size:12px; line-height:1.8}
+  #ctxWarn .cwm b{color:var(--fg)}
+  #ctxWarn .cwa{margin-top:16px; display:flex; gap:8px; justify-content:flex-end}
+  #ctxWarn .cwbtn{font-family:var(--mono); font-size:11px; letter-spacing:1px;
+                  padding:3px 12px; cursor:pointer; background:var(--bg3);
+                  border:1px solid var(--line2); color:var(--fg2)}
+  #ctxWarn .cwbtn:hover{border-color:var(--fg2); color:var(--fg)}
+  #ctxWarn .cwbtn.go{border-color:var(--red); color:var(--red)}
+  #ctxWarn .cwbtn.go:hover{background:var(--red); color:var(--bg)}
+</style>
+  <link rel="stylesheet" href="addons/canvas/canvas.css">
+</head>
+<body>
+
+<!-- 顶栏 -->
+<div class="topbar">
+  <span class="brand"><b>▮</b>CLAUDE // CONSOLE</span>
+  <span class="k">session</span><span class="v" id="tSession">等待第一句话</span>
+  <span class="k">cwd</span><span class="v" id="tCwd">—</span>
+  <span class="sp"></span>
+  <span class="dot" id="tDot">●</span><span class="v" id="tKey">—</span>
+  <span class="k">v</span><span class="v" id="tVer">—</span>
+  <span class="k" id="tClock">--:--:--</span>
+</div>
+
+<div class="main" id="main">
+
+  <!-- 左：过程流 + LOGS（画布模式下 LOGS 换成精简状态） -->
+  <div class="col left" id="colLeft">
+
+    <div class="panel" id="pFlow" style="flex:1.15">
+      <div class="hdr"><span>过程流</span><span class="sp"></span><span class="cnt" id="flowCnt">0 ev</span></div>
+      <div class="body" id="flowBody">
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="pRaw" style="flex:1">
+      <div class="hdr" style="border-top:1px solid var(--line)">
+        <span>LOGS</span><span class="sp"></span><span class="cnt" id="rawCnt">live</span>
+      </div>
+      <div class="body" id="rawBody">
+        <div class="log rawlog" id="rawlog"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 中：对话（画布模式下换成画布） -->
+  <div class="col mid" id="colMid">
+
+    <div class="panel" id="pChat">
+      <div class="hdr"><span>会话</span><span class="sp"></span><span class="cnt" id="turnCnt">0 turns</span></div>
+      <div class="body" id="chatBody">
+        <div class="chat" id="chat"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="pCanvas" hidden>
+      <div class="hdr">
+        <span>画布</span><span class="sp"></span>
+        <span class="tool on" id="tPen" title="手写/涂鸦（认笔压）">笔</span>
+        <span class="tool" id="tErase" title="点一下擦掉整笔">橡皮</span>
+        <span class="tool" id="tWs" title="工作区：在画布上圈出一块地方 —— 点开选形状">工作区</span>
+        <span class="wsmenu" id="wsMenu">
+          <span class="tool" id="tWsRect" title="矩形：拖一个框（按住 Shift = 正方形）">▭</span>
+          <span class="tool" id="tWsElp" title="圆 / 椭圆：拖出包围盒">◯</span>
+          <span class="tool" id="tWsPoly" title="多边形：逐点点，点回起点那个实心青点闭合（Esc 取消）">⬠</span>
+          <span class="tool" id="tWsLasso" title="不规则：按住随手画，松手自动闭合">〰</span>
+        </span>
+        <!-- 画完一个工作区后出现：点它 = 这个工作区定了。
+             ⚠️ 放在**工具条上**（2026-10-07 他定的）—— 原来贴着工作区跑，
+                一缩放/平移就跟着飘，碍事。 -->
+        <span class="tool wsdone" id="wsDone" hidden title="这个工作区画完了，点一下定下来">选好了</span>
+        <span class="tool" id="wsDrop" hidden title="这个框不要了，丢掉">不要</span>
+        <span class="tool wsdone" id="wsMin" hidden title="收起这个工作区 —— 里面的东西作为批注留着，不回原画">最小化</span>
+        <span class="tool" id="tUndo" title="撤销上一笔 —— 被当成误触丢掉的也能捞回来">撤</span>
+        <span class="tool" id="tClear" title="全部擦掉，不问了">清空</span>
+        <span class="cnt" id="cvInk">0 笔</span>
+        <span class="cnt" id="cvCnt">0 obj</span>
+      </div>
+      <div class="body" id="cvBody" style="overflow:hidden">
+        <div class="cvs" id="cvs">
+          <!-- .plane 是「内容层」：涂鸦和图片对象都住在它的坐标系里，
+               缩放/平移只是给它上 transform。视口 .cvs 本身不动。 -->
+          <div class="plane" id="plane">
+            <svg class="ink" id="ink"></svg>
+          </div>
+          <!-- 批注层：**盖在蒙版上面**（z-index 在 .wssvg 之上）。
+               工作区里画的笔都放这儿 —— 所以它们永远不被蒙，不用去蒙版里"挖洞"。
+               跟 .plane 同一套 transform / viewBox，坐标照旧是画布坐标。 -->
+          <div class="plane2" id="plane2">
+            <svg class="ink" id="ink2"></svg>
+          </div>
+          <div class="cvsnote" id="cvsNote">
+            画布还是空的<br>
+            直接写/画就行 · 框选截的图会落到这儿
+          </div>
+          <!-- 比例尺：挂在视口层（不吃 transform），缩放时只改线长和数字 -->
+          <div class="scalebar" id="scaleBar">
+            <div class="sbline" id="sbLine"></div>
+            <span class="sblabel" id="sbLabel"></span>
+          </div>
+          <!-- 工作区蒙版 —— 2026-10-07 大改：从「一个矩形」变成「任意形状 + 任意数量」。
+               旧做法是一个元素 + 一块巨大 box-shadow，**天生排他**（A 盖 B、B 盖 A ⇒ 全黑）。
+               现在用 SVG mask：一层白底挖 N 个洞，洞的形状随便、**重叠也只是"还是洞"**，
+               没有"算谁的"这回事。浓度 98%（他定的）。 -->
+          <svg class="wssvg" id="wsSvg">
+            <defs>
+              <mask id="wsMask" maskUnits="userSpaceOnUse" x="0" y="0" width="100%" height="100%">
+                <rect x="0" y="0" width="100%" height="100%" fill="#fff"/>
+                <g id="wsHoles" fill="#000"></g>
+              </mask>
+            </defs>
+            <rect class="wscover" x="0" y="0" width="100%" height="100%" mask="url(#wsMask)"/>
+            <g id="wsShapes"></g>
+          </svg>
+          <!-- 工作区的小标记（◈编号 + × 删除）—— 跟形状一样挂视口层 -->
+          <div class="wsui" id="wsUi"></div>
+          <!-- 调试面板：按 ` 开 / 关（临时给的，看完可以摘） -->
+          <div class="wsdbg" id="wsDbg"></div>
+          <!-- 状态牌：进了工作区就挂出来 —— "你现在画的都归它" -->
+          <div class="wsmode" id="wsMode" hidden></div>
+          <!-- 画完一个工作区 → 工具条上的「选好了」亮起来（2026-10-07 他定的：
+               不再等 2 秒、不再猜；按钮**固定在工具条**，不跟着工作区飘） -->
+          <!-- 切回普通画布时问的导出框（2026-10-07 他定的五问） -->
+          <div class="exask" id="exAsk">
+           <div class="exbox">
+            <div class="exrow extitle">导出这一版？</div>
+            <div class="exrow"><span class="exlab">名字</span>
+              <input class="exinp" id="exName" placeholder="留空就用时间戳"></div>
+            <div class="exrow"><span class="exlab">格式</span>
+              <span class="exchip on" data-fmt="png">PNG</span>
+              <span class="exchip" data-fmt="pdf">PDF</span>
+              <span class="exchip" data-fmt="own">自家格式</span></div>
+            <div class="exrow"><span class="exlab">范围</span>
+              <span class="exchip on" data-scope="frame">框里那块</span>
+              <span class="exchip" data-scope="all">整个画布</span></div>
+            <div class="exrow"><span class="exlab">位置</span>
+              <input class="exinp" id="exWhere" placeholder="留空 = claude-ui\exports\"></div>
+            <div class="exrow exbtns">
+              <button class="wsbtn go" id="exGo">导出</button>
+              <button class="wsbtn" id="exSkip">这次不用</button>
+            </div>
+           </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 右：状态（画布模式下换成会话） -->
+  <div class="col right" id="colRight">
+
+    <!-- 工作区管理（只在画布模式显示；顺序由 apply() 里 appendChild 定，会挂到会话下面） -->
+    <div class="panel" id="pWs" hidden>
+      <div class="hdr"><span>工作区</span><span class="sp"></span><span class="cnt" id="wsCnt">0</span></div>
+      <div class="body" id="wsRows"></div>
+    </div>
+
+    <div class="panel" id="pStat">
+    <div class="hdr"><span>状态</span><span class="sp"></span><span class="cnt">live</span></div>
+    <div class="body">
+      <div class="stat">
+
+        <div class="grp g-hw">
+          <div class="gt">硬件</div>
+          <div class="hwrow hw-net">
+            <div class="kv"><span class="l">网络</span><span class="r2" id="hNet">—</span></div>
+            <div class="bar"><i id="hNetBar" style="width:0%;background:var(--vio)"></i></div>
+          </div>
+          <div class="hwrow hw-mem">
+            <div class="kv"><span class="l">内存</span><span class="r2" id="hMem">—</span></div>
+            <div class="bar"><i id="hMemBar" style="width:0%;background:var(--cyn)"></i></div>
+          </div>
+          <div class="hwrow hw-bat">
+            <div class="kv"><span class="l">电池</span><span class="r2 hi" id="hBat">—</span></div>
+            <div class="bar"><i id="hBatBar" style="width:0%;background:var(--grn)"></i></div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="ct">
+            <span>CPU</span>
+            <span class="lg"><i class="sw-bar"></i>使用率</span>
+            <span class="lg"><i class="sw-line"></i>温度</span>
+            <span class="now" id="tempNow">68% · 62°C</span>
+          </div>
+          <svg id="tempChart" viewBox="0 0 200 58" preserveAspectRatio="none"></svg>
+          <div class="cf"><span id="cpuSpec">—</span><span id="tempPeak">—</span></div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="grp g-ctx">
+          <div class="gt">上下文</div>
+          <div class="kv"><span class="l">used</span><span class="r2" id="ctxUsed">—</span></div>
+          <div class="bar"><i id="ctxBar" style="width:0%;background:var(--grn)"></i></div>
+          <div class="kv"><span class="l">输入</span><span class="r2" id="ctxIn">—</span></div>
+          <div class="kv"><span class="l">输出</span><span class="r2" id="ctxOut">—</span></div>
+          <div class="kv"><span class="l">缓存读</span><span class="r2" id="ctxCache">—</span></div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="grp g-run">
+          <div class="gt">运行时</div>
+          <div class="kv"><span class="l">mcp</span><span class="r2" id="rMcp">—</span></div>
+          <div class="kv"><span class="l">tools</span><span class="r2" id="rTools">—</span></div>
+          <div class="kv"><span class="l">turns</span><span class="r2" id="rTurns">0</span></div>
+          <div class="kv"><span class="l">elapsed</span><span class="r2" id="rElapsed">—</span></div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div class="grp g-cost">
+          <div class="gt">成本 <span style="color:var(--fg3);letter-spacing:0">DeepSeek 牌价</span></div>
+          <div class="kv"><span class="l">本轮</span><span class="r2 hi" id="costTurn">—</span></div>
+          <div class="kv"><span class="l">本会话</span><span class="r2" id="costSession">—</span></div>
+          <div class="acts">
+            <button class="act" id="btnRest">我要休息</button>
+            <button class="act" id="btnFresh">上下文满了</button>
+          </div>
+          <div class="actState" id="actState"></div>
+        </div>
+
+      </div>
+    </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- 框选遮罩：截图当底图，拖个框 → 裁 -->
+<div class="shotov" id="shotOv" hidden>
+  <img id="shotImg" alt="">
+  <div class="shotsel" id="shotSel" hidden></div>
+  <div class="shothint" id="shotHint">拖一个框 → 回车确认 · Esc 取消</div>
+</div>
+
+<!-- 底：输入 -->
+<div class="inbar">
+  <div class="inrow">
+    <span class="p">&gt;</span>
+    <textarea id="inp" rows="1" autocomplete="off" spellcheck="false"
+              placeholder="说点什么…  （这个框以后不止收打字）"></textarea>
+    <button class="stopbtn" id="btnStop" title="中断当前任务">中断</button>
+  </div>
+  <div class="modes">
+    <span class="mode" data-act="mic" id="modeMic" title="点一下开始听，再点一下停">语音</span>
+    <span class="mode" data-act="canvas" id="modeCanvas" title="中栏换成画布，会话挪到右栏，左栏 LOGS 换成精简状态">画布</span>
+    <span class="mode" data-act="shot" id="modeShot" title="截桌面 → 拖个框 → 把裁好的图路径塞进输入框">框选</span>
+    <span class="mhint">Enter 发送 · Ctrl+Enter 换行</span>
+  </div>
+</div>
+
+<script>
+  // ══ 接真数据：轮询本地服务的 /api/hardware ══
+  const HIST = 40;                       // 图卡保留最近 40 个采样
+  const usageHist = [], tempHist = [];
+  let firstTick = true;
+
+  // 温度映射：30–75°C 铺满整幅高度（否则线会挤在中间一条）
+  const T_LO = 30, T_HI = 75;
+  const yU = (v, H, pad) => H - pad - (Math.min(v, 100) / 100) * (H - pad * 2);
+  const yT = (v, H, pad) => H - pad - (Math.max(0, Math.min(1, (v - T_LO) / (T_HI - T_LO)))) * (H - pad * 2);
+
+  function drawCpuCard(){
+    const svg = document.getElementById('tempChart');
+    const W = 200, H = 58, pad = 4, bw = W / HIST;
+    const off = HIST - usageHist.length;   // 数据不够时靠右对齐
+    let bars = '', pts = [], last = null;
+    usageHist.forEach((u, i) => {
+      const x = (off + i) * bw, yy = yU(u, H, pad);
+      bars += `<rect x="${(x+0.4).toFixed(2)}" y="${yy.toFixed(2)}" width="${Math.max(bw-0.8,0.5).toFixed(2)}" height="${(H-yy).toFixed(2)}" fill="#1e3a4a"/>`;
+    });
+    tempHist.forEach((t, i) => {
+      const x = (off + i) * bw + bw / 2, y = yT(t, H, pad);
+      pts.push(`${x.toFixed(2)},${y.toFixed(2)}`);
+      last = [x, y];
+    });
+    svg.innerHTML = bars + (pts.length > 1
+      ? `<polyline points="${pts.join(' ')}" fill="none" stroke="#ffd866" stroke-width="1.3" stroke-linejoin="round"/>` +
+        `<circle cx="${last[0].toFixed(2)}" cy="${last[1].toFixed(2)}" r="1.8" fill="#ffd866"/>`
+      : '');
+  }
+
+  async function tick(){
+    let d;
+    try{
+      const r = await fetch('/api/hardware', {cache:'no-store'});
+      d = await r.json();
+    }catch(e){
+      document.getElementById('hMem').textContent = '服务没起';
+      return;
+    }
+    // ── 硬件组 ──
+    const set = (id, txt) => document.getElementById(id).textContent = txt;
+    const bar = (id, pct) => document.getElementById(id).style.width = Math.max(0, Math.min(100, pct)) + '%';
+
+    const fmtRate = b => b >= 1048576 ? (b / 1048576).toFixed(1) + 'M'
+                      : b >= 1024    ? (b / 1024).toFixed(0) + 'K' : b + 'B';
+    if (d.net) {
+      set('hNet', `↓${fmtRate(d.net.down)} ↑${fmtRate(d.net.up)}`);
+      bar('hNetBar', Math.min(100, (d.net.down + d.net.up) / 1048576 * 20)); // 5M/s 打满
+    }
+    set('hMem', `${d.mem.percent}% · ${d.mem.used}G`);  bar('hMemBar', d.mem.percent);
+    set('hBat', d.battery
+      ? (d.battery.secsleft != null
+          ? `${Math.floor(d.battery.secsleft/3600)}h ${Math.floor(d.battery.secsleft%3600/60)}m · ${d.battery.percent}%`
+          : `${d.battery.percent}% ${d.battery.plugged ? '(充电中)' : ''}`)
+      : '—');
+    bar('hBatBar', d.battery ? d.battery.percent : 0);
+
+    // ── CPU 图卡 ──
+    const cpu = d.cpu.percent, temp = d.cpu.temp;
+    set('cpuSpec', `${d.cpu.cores}C/${d.cpu.threads}T`);
+    if (!firstTick) {                      // 第一次的 cpu_percent 恒为 0，丢掉
+      usageHist.push(cpu); if (usageHist.length > HIST) usageHist.shift();
+      if (temp != null) { tempHist.push(temp); if (tempHist.length > HIST) tempHist.shift(); }
+    }
+    firstTick = false;
+    set('tempNow', temp != null ? `${cpu}% · ${temp}°C` : `${cpu}%`);
+    set('tempPeak', temp != null
+      ? `峰值 ${Math.round(Math.max(...usageHist))}% / ${Math.round(Math.max(...tempHist))}°C`
+      : `峰值 ${Math.round(Math.max(...usageHist))}%`);
+    drawCpuCard();
+  }
+
+  tick();
+  setInterval(tick, 1000);
+
+  // ══════════════════════════════════════════════════════════════
+  // 接真数据 2/2：CC 事件流（SSE）+ 发送
+  // ══════════════════════════════════════════════════════════════
+  const $ = id => document.getElementById(id);
+  const flowEl = $('log'),    flowBody = $('flowBody');
+  const rawEl  = $('rawlog'), rawBody  = $('rawBody');
+  const chatEl = $('chat'),   chatBody = $('chatBody');
+
+  const S = { t0: 0, turns: 0, msgEls: new Map(), seen: new Set(), thinkEl: null,
+              inTok: 0, outTok: 0, cacheTok: 0, flowSeq: 0, lastTextAt: 0, gotInit: false,
+              ctxNow: 0, ctxWarned: false, turnTools: [] };
+  const PRICE = { hit: 0.02, miss: 1.00, out: 2.00 };   // 元/百万 token（DeepSeek 非高峰）
+  let costCNY = 0, ctxWin = 0;
+
+  // ── 上下文水位 ────────────────────────────────────────────────
+  // ⚠️ 2026-10-07 实测：CC 每轮报的 usage 是**这一次调用的输入**，不是累计 ——
+  //    连续几轮拿到的是 (879, 189184, 0) 这种：input_tokens 很小、cache_read 很大。
+  //    所以「当前上下文」= 最后一轮的 in + cache_read + cache_creation，
+  //    **不能累加**（累加会把 225 轮全加起来，进度条早假爆了）。
+  //    「输入/输出/缓存读」那三行仍然用累加 —— 那问的是"本会话一共花了多少"，另一回事。
+  const CTX_RED  = 800000;   // 进度条变红
+  const CTX_WARN = 900000;   // 弹窗提醒
+  const CTX_AUTO = 967000;   // CC 实际自动压缩点（= 窗口 1M − 33k，实测过）
+
+  const hms = () => new Date().toTimeString().slice(0, 8);
+  const toBottom = el => { if (el) el.scrollTop = el.scrollHeight; };
+  const esc = s => String(s).replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+  const kfmt = n => n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'k' : String(n);
+
+  function killThink(){ if (S.thinkEl){ S.thinkEl.remove(); S.thinkEl = null; } }
+
+  function flow(icon, cls, html, sub){
+    killThink();
+    const d = document.createElement('div');
+    d.className = 'li';
+    d.dataset.r = ++S.flowSeq;        // 每条事件一个号 —— 结论末尾的「依据」角标指向它
+    d.innerHTML = `<span class="t">${hms()}</span><span class="ic ${cls}">${icon}</span><span class="m">${html}</span>`;
+    flowEl.appendChild(d);
+    if (sub){
+      const s = document.createElement('div');
+      s.className = 'sub'; s.textContent = '└ ' + sub;
+      flowEl.appendChild(s);
+    }
+    $('flowCnt').textContent = flowEl.querySelectorAll('.li').length + ' ev';
+    toBottom(flowBody);
+  }
+
+  function raw(tag, cls, html){
+    const d = document.createElement('div');
+    d.className = 'li';
+    d.innerHTML = `<span class="t">${new Date().toTimeString().slice(0,12)}</span>` +
+                  `<span class="tag">[${tag}]</span><span class="m ${cls||''}">${html}</span>`;
+    rawEl.appendChild(d);
+    while (rawEl.children.length > 400) rawEl.removeChild(rawEl.firstChild);
+    toBottom(rawBody);
+  }
+
+  // 极简 markdown：够看清 AI 回复就成，不引库（保持单文件）
+  function md(s){
+    const escd = s.replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+    const out = [];
+    escd.split(/```/).forEach((part, i) => {
+      if (i % 2 === 1){                        // 奇数段 = 代码块，不再往下解析
+        out.push('<pre>' + part.replace(/^\n+|\n+$/g, '') + '</pre>');
+        return;
+      }
+      part.split('\n').forEach(line => {
+        const t = line.trim();
+        if (!t){ out.push('<div class="sp"></div>'); return; }
+        const h = t.replace(/`([^`]+)`/g, '<code>$1</code>')
+                   .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+        if (/^#{1,4} /.test(t))      out.push('<h4>' + h.replace(/^#{1,4} /, '') + '</h4>');
+        else if (/^[-*] /.test(t))   out.push('<div class="li2">· ' + h.replace(/^[-*] /, '') + '</div>');
+        else                         out.push('<div>' + h + '</div>');
+      });
+    });
+    return out.join('');
+  }
+
+  // 把正文里的 [[eN]] 换成可点击的角标 → 点它高亮左栏对应那条。
+  // N = **本回合第 N 次工具调用**，由 CC 自己数（见 server.py 的 CITE_PROMPT）。
+  //
+  // ⚠️ 对不上（CC 数错了、或那次调用没进左栏）就**原样保留** `[[e2]]` 这几个字符 ——
+  //    宁可看见失败，也别静默吞掉：静默失败是最难查的那种 bug，
+  //    而这里"对不上"本身就说明 CC 数错了工具次数，是个该被看见的信号。
+  function cite(html){
+    return html.replace(/\[\[e(\d{1,3})\]\]/g, (m0, n) => {
+      const ev = S.turnTools[+n - 1];
+      if (ev === undefined) return m0;
+      return `<span class="cite" data-r="${ev}" title="本回合第 ${n} 次工具调用">${n}</span>`;
+    });
+  }
+
+  // 末尾那排「依据」是**兜底**：正文里已经有 [[eN]] 角标时就不显示它 ——
+  // 两套并存会让人分不清哪个指哪（他 2026-10-07 选的这个折中）。
+  function syncSteps(b){
+    const st = b.parentElement && b.parentElement.querySelector('.steps');
+    if (!st) return;
+    st.style.display = b.querySelector('.cite') ? 'none' : '';
+  }
+
+  function bubble(who, text, refs){
+    const m = document.createElement('div');
+    m.className = 'msg';
+    const w = document.createElement('div');
+    w.className = 'who ' + who;
+    w.textContent = who === 'u' ? '龙' : 'CLAUDE';
+    const b = document.createElement('div');
+    b.className = who === 'u' ? 'bubble-u' : 'a-body';
+    if (who === 'u'){ b.style.whiteSpace = 'pre-wrap'; b.textContent = text; }
+    else            { b.innerHTML = cite(md(text)); }
+    m.append(w, b);
+    if (refs && refs.length){              // 每条结论挂依据 → 点它跳左栏对应那条
+      const st = document.createElement('div');
+      st.className = 'steps';
+      refs.forEach(n => {
+        const s = document.createElement('span');
+        s.className = 'ref';
+        s.dataset.r = n;
+        s.textContent = n;
+        st.appendChild(s);
+      });
+      m.appendChild(st);
+    }
+    chatEl.appendChild(m);
+    toBottom(chatBody);
+    return b;
+  }
+
+  function think(n){
+    if (!S.thinkEl){
+      S.thinkEl = document.createElement('div');
+      S.thinkEl.className = 'li';
+      S.thinkEl.innerHTML = `<span class="t">${hms()}</span><span class="ic v">·</span><span class="m">思考中 …</span>`;
+      flowEl.appendChild(S.thinkEl);
+    }
+    if (n != null) S.thinkEl.querySelector('.m').textContent = `思考中 … ${n} tokens`;
+    toBottom(flowBody);
+  }
+
+  function updCtx(){
+    const used = S.ctxNow;                       // 当前上下文占用（绝对值）
+    if (ctxWin){
+      const pct = Math.min(100, used / ctxWin * 100);
+      // 他的规格是绝对 token 数（800k 变红 / 900k 弹窗），所以绝对值放前面
+      $('ctxUsed').textContent = kfmt(used) + ' · ' + pct.toFixed(1) + '%';
+      $('ctxBar').style.width = pct + '%';
+      $('ctxBar').style.background = used >= CTX_RED ? 'var(--red)' : 'var(--grn)';
+      if (used >= CTX_WARN) showCtxWarn(used, ctxWin);   // 内部自带"只弹一次"闸
+    }
+    $('ctxIn').textContent = kfmt(S.inTok);
+    $('ctxOut').textContent = kfmt(S.outTok);
+    $('ctxCache').textContent = kfmt(S.cacheTok);
+  }
+
+  // 上下文告警：到 CTX_WARN 弹一次，同一个会话不重复弹
+  function showCtxWarn(used, win){
+    if (S.ctxWarned) return;
+    S.ctxWarned = true;
+    $('ctxWarnMsg').innerHTML =
+      `已用 <b>${kfmt(used)}</b> / ${kfmt(win)}。<br>`
+      + `CC 到 <b>${kfmt(CTX_AUTO)}</b> 会自动压缩上下文 —— 压缩是把旧对话换成摘要，`
+      + `<b>细节丢掉就回不来了</b>。<br>`
+      + `想留住现在这些，换个新会话（它会先把该记的写进记忆库）。`;
+    $('ctxWarn').classList.add('on');
+  }
+
+  // ── 事件分发 ──────────────────────────────────────────────────
+  function handle(d){
+    const t = d.type, st = d.subtype;
+
+    // server 自己发的界面事件（不是 CC 的事件）
+    if (t === '_ui'){
+      if (d.event === 'fresh_done'){
+        chatEl.innerHTML = '';
+        S.msgEls.clear(); S.seen.clear(); S.thinkEl = null;
+        S.turns = 0; S.inTok = 0; S.outTok = 0; S.cacheTok = 0; S.t0 = 0;
+        S.ctxNow = 0; S.ctxWarned = false; S.turnTools = [];
+        S.flowSeq = 0; S.lastTextAt = 0; S.gotInit = false;
+        costCNY = 0; ctxWin = 0;
+        flowEl.innerHTML = '';
+        $('flowCnt').textContent = '0 ev';
+        $('costTurn').textContent = '—';      $('costSession').textContent = '—';
+        $('turnCnt').textContent = '0 turns'; $('rTurns').textContent = '0';
+        $('ctxUsed').textContent = '—';       $('ctxBar').style.width = '0%';
+        $('ctxIn').textContent = '—'; $('ctxOut').textContent = '—'; $('ctxCache').textContent = '—';
+        $('tSession').textContent = '—'; $('tVer').textContent = '—'; $('tKey').textContent = '—';
+        $('rMcp').textContent = '—'; $('rTools').textContent = '—'; $('rElapsed').textContent = '—';
+        acting = false; btnRest.disabled = btnFresh.disabled = false;
+        actMsg('新对话已开 · 发条消息就把它叫起来 ✓', 'ok');
+        raw('sys', 'ok', 'fresh · 上下文已归零');
+      } else if (d.event === 'rest_done'){
+        stopSSE = true;
+        acting = false;
+        actMsg('服务已退出。这个窗口可以关了 —— 下次要用双击桌面图标。', 'ok');
+        raw('sys', 'wr', 'rest · 服务已退出');
+      }
+      return;
+    }
+
+    if (t === 'system' && st === 'init'){
+      S.t0 = Date.now();
+      $('tSession').textContent = (d.session_id || '').slice(0, 8);
+      $('tCwd').textContent = d.cwd || '—';
+      $('tKey').textContent = d.apiKeySource || '—';
+      $('tVer').textContent = d.claude_code_version || '—';
+      $('rMcp').textContent = (d.mcp_servers || []).map(m => m.name).join(', ') || '—';
+      $('rTools').textContent = (d.tools || []).length;
+      if (!S.gotInit){          // 左栏只加一次 —— 刷新后补发的 init 还会来，别重复
+        S.gotInit = true;
+        flow('●', 'g', `session <b>start</b> · ${esc(d.claude_code_version || '')}`);
+        flow('·', 'd', `model <b>${esc(d.model || '')}</b> · memory → auto`);
+      }
+      raw('init', 'ok', `session ${(d.session_id||'').slice(0,8)} model=${d.model} tools=${(d.tools||[]).length} key=${d.apiKeySource}`);
+      return;
+    }
+
+    if (t === 'system' && st === 'compact_boundary'){
+      // 上下文被自动压缩了 —— 这里能看到它，顺便实测压缩阈值到底多少
+      const meta = d.compact_metadata || d.metadata || {};
+      const pre = meta.pre_tokens ?? meta.preTokens ?? meta.pre_compact_tokens;
+      flow('⟳', 'a', `compact <b>上下文已压缩</b>` + (pre != null ? ` · 压缩前 <b>${pre}</b> tokens` : ''));
+      raw('compact', 'wr', 'compact_boundary ' + JSON.stringify(d).slice(0, 260));
+      return;
+    }
+
+    if (t === 'system' && st === 'thinking_tokens'){ think(d.estimated_tokens || 0); return; }
+
+    if (t === 'assistant'){
+      const m = d.message || {};
+      (m.content || []).forEach(c => {
+        if (c.type === 'thinking'){ /* 内容不渲染，只靠 thinking_tokens 驱动指示器 */ }
+        else if (c.type === 'text'){
+          killThink();
+          let b = S.msgEls.get(m.id);
+          if (!b){
+            // 这一轮到目前为止左栏产生过哪些事件 → 挂成依据角标（最多 12 个）
+            const refs = [];
+            for (let i = S.lastTextAt + 1; i <= S.flowSeq && refs.length < 12; i++) refs.push(i);
+            b = bubble('a', '', refs);
+            S.msgEls.set(m.id, b);
+            S.lastTextAt = S.flowSeq;
+          }
+          b.dataset.raw = (b.dataset.raw || '') + c.text;   // 累积原文，重渲染
+          b.innerHTML = cite(md(b.dataset.raw));
+          syncSteps(b);
+          toBottom(chatBody);
+        }
+        else if (c.type === 'tool_use'){
+          killThink();
+          const nm = c.name || '?', inp = c.input || {};
+          let dsc = inp.file_path || inp.path || inp.pattern || inp.command || inp.prompt
+                 || inp.url || inp.query || inp.description || inp.skill || '';
+          dsc = String(dsc).replace(/\s+/g, ' ').slice(0, 90);
+          const ic = nm === 'Bash' ? 'a' : (nm === 'Write' || nm === 'Edit') ? 'v'
+                   : nm.startsWith('mcp__') ? 'g' : 'c';
+          flow('▸', ic, `<b>${esc(nm)}</b> ${esc(dsc)}`);
+          S.turnTools.push(S.flowSeq);   // 第 N 次工具调用 → 左栏哪一条（给 [[eN]] 用）
+          raw('tool', '', `${esc(nm)}(${esc(dsc)})`);
+        }
+      });
+      if (m.usage && m.id && !S.seen.has(m.id)){
+        S.seen.add(m.id);
+        S.inTok    += m.usage.input_tokens || 0;
+        S.outTok   += m.usage.output_tokens || 0;
+        S.cacheTok += m.usage.cache_read_input_tokens || 0;
+        // 上下文占用取**这一次**的输入总量，不累加（见上面 CTX_RED 那段注释）。
+        // cache_creation 以前漏了 —— 它是"没命中缓存、要重新写进缓存"的那部分，
+        // 同样是这一轮实打实占着窗口的 token。
+        S.ctxNow = (m.usage.input_tokens || 0)
+                 + (m.usage.cache_read_input_tokens || 0)
+                 + (m.usage.cache_creation_input_tokens || 0);
+        updCtx();
+      }
+      return;
+    }
+
+    if (t === 'user'){
+      const cs = (d.message && Array.isArray(d.message.content)) ? d.message.content : [];
+      cs.forEach(c => {
+        if (c.type !== 'tool_result') return;
+        let txt = '';
+        if (typeof c.content === 'string') txt = c.content;
+        else if (Array.isArray(c.content)) txt = c.content.map(x => x.text || '').join(' ');
+        const line = txt.split('\n').map(s => s.trim()).filter(Boolean)[0] || '(空)';
+        raw('result', c.is_error ? 'er' : 'ok', esc(line.slice(0, 130)));
+      });
+      return;
+    }
+
+    if (t === 'result'){
+      S.turnTools = [];             // 回合结束 → 工具计数归零（[[eN]] 只在本回合内有效）
+      S.turns++;
+      $('rTurns').textContent = S.turns;
+      $('turnCnt').textContent = S.turns + ' turns';
+      const mu = (d.modelUsage && d.modelUsage['deepseek-flash']) || {};
+      if (mu.contextWindow) ctxWin = mu.contextWindow;
+      updCtx();                    // ctxWin 是到这里才拿到的 —— 拿到就立刻刷一次水位
+      const hit = mu.cacheReadInputTokens || 0, outT = mu.outputTokens || 0;
+      const inT = mu.inputTokens || 0, miss = Math.max(0, inT - hit);
+      const cny = (hit*PRICE.hit + miss*PRICE.miss + outT*PRICE.out) / 1e6;
+      costCNY += cny;
+      $('costTurn').textContent = '¥' + cny.toFixed(4);
+      $('costSession').textContent = '¥' + costCNY.toFixed(3);
+      const secs = (d.duration_api_ms || 0) / 1000;
+      flow('✓', 'g', `turn <b>complete</b> · ${secs.toFixed(1)}s`,
+           `in ${kfmt(inT)} (cache ${kfmt(hit)}) · out ${kfmt(outT)} · ¥${cny.toFixed(4)}`);
+      raw('turn', '', `complete api=${secs.toFixed(1)}s in=${inT} cache=${hit} out=${outT} cny=${cny.toFixed(4)}`);
+      updCtx();
+      return;
+    }
+  }
+
+  // ── SSE ───────────────────────────────────────────────────────
+  let es, stopSSE = false;
+  function connect(){
+    if (stopSSE) return;
+    es = new EventSource('/api/stream');
+    es.onopen = () => raw('sys', 'ok', 'SSE 已连 · ' + location.host);
+    es.onmessage = ev => { let d; try { d = JSON.parse(ev.data); } catch (e) { return; } handle(d); };
+    es.onerror = () => {
+      es.close();
+      if (stopSSE) return;                      // 服务自己退的，别没完没了重连
+      raw('err', 'wr', 'SSE 断开，3 秒后重连…');
+      setTimeout(connect, 3000);
+    };
+  }
+  connect();
+
+  // ── 附件卡片 ──────────────────────────────────────────────────
+  //   拖进来的文件（和框选裁的图）**不在框里显示一串路径**，显示成"它本来的样子"：
+  //   系统图标 + 文件名 + 一个 × 能单独摘掉。发送时把路径接到消息末尾。
+  //   ⇒ 框里只剩他自己打的字，这也正是"拖进来之后还能打字"的前提。
+  const attaches = [];                     // 绝对路径，按加入顺序
+  const attachHost = document.querySelector('.modes');
+  const mhintEl = attachHost.querySelector('.mhint');
+
+  function extOf(p){ const m = /\.([A-Za-z0-9]{1,12})$/.exec(p || ''); return m ? m[1].toLowerCase() : ''; }
+  function nameOf(p){ return (p || '').split(/[\\/]/).pop() || p; }
+
+  function addAttach(path){
+    if (!path || attaches.indexOf(path) >= 0) return;   // 同一个文件拖两次只留一张卡
+    attaches.push(path);
+    const el  = document.createElement('span');
+    el.className = 'afile'; el.title = path;            // 悬停看完整路径
+    const img = document.createElement('img');
+    img.className = 'ic'; img.alt = '';
+    img.onerror = () => {                               // 认不出类型 → 色块，别给个裂图
+      const fb = document.createElement('span');
+      fb.className = 'fb';
+      fb.textContent = (extOf(path) || '?').slice(0, 4).toUpperCase();
+      if (img.parentNode) img.replaceWith(fb);
+      else img.dataset.pending = 'fb';                  // 还没挂进 DOM（见下）
+    };
+    const nm = document.createElement('span');
+    nm.className = 'nm'; nm.textContent = nameOf(path);
+    const x = document.createElement('span');
+    x.className = 'x'; x.textContent = '×'; x.title = '移除';
+    x.onclick = () => {
+      const i = attaches.indexOf(path);
+      if (i >= 0) attaches.splice(i, 1);
+      el.remove();
+    };
+    el.append(img, nm, x);
+    attachHost.insertBefore(el, mhintEl);
+    // ⚠️ **src 必须放在挂进 DOM 之后设**。放前面的话：本地 404 回得极快，
+    //    onerror 会在 img 还没有父节点时就烧掉，而 replaceWith 没父节点是**空操作**
+    //    ⇒ 卡片上留个永远不显示的 img，看着就是"图标没了但也无色块"。（实测踩到）
+    img.src = '/file-icon/' + encodeURIComponent(extOf(path));
+    if (img.dataset.pending === 'fb'){                  // 极端情况下还是抢在前面了
+      const fb = document.createElement('span');
+      fb.className = 'fb';
+      fb.textContent = (extOf(path) || '?').slice(0, 4).toUpperCase();
+      img.replaceWith(fb);
+    }
+  }
+  window.__attach = addAttach;             // app.py 的拖拽、画布模块的框选都调这个
+
+  function clearAttach(){
+    attaches.length = 0;
+    attachHost.querySelectorAll('.afile').forEach(e => e.remove());
+  }
+
+  // ── 输入框 ────────────────────────────────────────────────────
+  //   多行框：高度跟着内容长（封顶 INP_MAX），Enter 发送，Ctrl+Enter 换行。
+  const inp = document.querySelector('.inrow textarea');
+  const INP_MAX = 96;                     // 跟 CSS 的 max-height 保持一致
+  function growInp(){
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, INP_MAX) + 'px';
+  }
+  inp.addEventListener('input', growInp);
+  growInp();
+
+  inp.addEventListener('keydown', async e => {
+    if (e.key !== 'Enter' || e.isComposing) return;   // isComposing = 中文输入法选字中
+    if (e.ctrlKey || e.metaKey){                      // Ctrl+Enter = 在光标处插一个换行
+      e.preventDefault();
+      const s = inp.selectionStart, t = inp.selectionEnd;
+      inp.value = inp.value.slice(0, s) + '\n' + inp.value.slice(t);
+      inp.selectionStart = inp.selectionEnd = s + 1;
+      growInp();
+      return;
+    }
+    // 裸 Enter = 发送（textarea 的默认行为是插换行，所以这里必须无条件拦掉 ——
+    // 否则空框上按回车会在看不见的地方堆出一堆空行）
+    e.preventDefault();
+    const typed = inp.value.trim();
+    if (!typed && !attaches.length) return;      // 全空 = 什么都不发生
+    // 附件的**路径**接到消息末尾 —— 那才是模型真正收到的东西，卡片只是它的样子。
+    const text = (typed && attaches.length) ? typed + '\n\n' + attaches.join('\n')
+               : (typed || attaches.join('\n'));
+    inp.value = '';
+    growInp();
+    inp.focus();                        // 发完继续能打字
+    clearAttach();
+    bubble('u', text);
+    raw('user', 'cy', esc(text.slice(0, 130)));
+    try {
+      const r = await fetch('/api/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      if (!r.ok) raw('err', 'er', 'send 失败 HTTP ' + r.status);
+    } catch (err) { raw('err', 'er', '服务没起：' + esc(err.message)); }
+  });
+
+  // ── 语音 chip ─────────────────────────────────────────────────
+  // 走 WebView2 自带的 webkitSpeechRecognition（不用装任何东西）。
+  // ⚠️ 前提：app.py 里的麦克风权限桥必须装上 —— WebView2 宿主不处理
+  //    PermissionRequested 时，getUserMedia 的 promise 会**永远挂着**
+  //    （既不 resolve 也不 reject），表现出来就是"点了没反应"。
+  (function(){
+    const chip = document.getElementById('modeMic');
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR){
+      chip.classList.add('na');
+      chip.title = '这个壳没暴露语音识别';
+      return;
+    }
+    let rec = null, on = false, base = '';
+
+    function stop(){
+      on = false;
+      chip.classList.remove('on');
+      try { rec && rec.stop(); } catch(_){}
+      rec = null;
+      inp.focus();
+    }
+
+    function start(){
+      rec = new SR();
+      rec.lang = 'zh-CN';
+      rec.interimResults = true;
+      rec.continuous = true;
+      base = inp.value.trim();
+      rec.onresult = e => {
+        let fin = '', itr = '';
+        for (let i = e.resultIndex; i < e.results.length; i++){
+          const t = e.results[i][0].transcript;
+          if (e.results[i].isFinal) fin += t; else itr += t;
+        }
+        if (fin) base = (base ? base + ' ' : '') + fin.trim();
+        inp.value = (base + (itr ? ' ' + itr : '')).trim();
+        // 字数变了要让光标待在末尾，不然下次输入会插在中间
+        inp.selectionStart = inp.selectionEnd = inp.value.length;
+      };
+      rec.onerror = e => {
+        // not-allowed = 权限桥没装上（或用户拒了）；no-speech = 单纯没听到
+        if (e.error !== 'no-speech') raw('err', 'er', '语音出错：' + esc(e.error));
+        stop();
+      };
+      rec.onend = () => { if (on) stop(); };   // 引擎自己断了也要把状态收回来
+      try { rec.start(); } catch(e){ raw('err','er','语音起不来：' + esc(e.message)); return; }
+      on = true;
+      chip.classList.add('on');
+      flow('·', 'd', '语音：开始听');
+    }
+
+    chip.addEventListener('click', () => on ? stop() : start());
+  })();
+
+
+  // ── 画布模式：三块面板搬家 ────────────────────────────────────
+  //  普通：  过程流 │ 会话        │ 状态
+  //  画布：  过程流 │ 画布        │ 会话
+  //          状态(替 LOGS,只留 CPU/内存/费用)
+  //
+  //  搬的是 DOM 节点本身，不是复制 —— 所以绑定在上面的状态、滚动位置、
+  //  事件全都跟着走，不用重连。⚠️ 顺序靠 appendChild 的调用次序决定。
+  (function(){
+    const chip  = document.getElementById('modeCanvas');
+    const L = document.getElementById('colLeft');
+    const M = document.getElementById('colMid');
+    const Rt= document.getElementById('colRight');
+    const pFlow = document.getElementById('pFlow');
+    const pRaw  = document.getElementById('pRaw');
+    const pChat = document.getElementById('pChat');
+    const pCvs  = document.getElementById('pCanvas');
+    const pStat = document.getElementById('pStat');
+    const pWs   = document.getElementById('pWs');
+    let on = false;
+
+    function apply(next){
+      on = next;
+      chip.classList.toggle('on', on);
+      if (on){
+        L.appendChild(pFlow); L.appendChild(pStat);   // 左：过程流 → 状态
+        M.appendChild(pCvs);                          // 中：画布
+        Rt.appendChild(pChat);                        // 右：会话
+        Rt.appendChild(pWs);                          //    工作区管理挂在会话**下面**
+      } else {
+        L.appendChild(pFlow); L.appendChild(pRaw);
+        M.appendChild(pChat);
+        Rt.appendChild(pStat);
+      }
+      pRaw.hidden  = on;
+      pCvs.hidden  = !on;
+      if (pWs) pWs.hidden = !on;                      // 工作区面板只在画布模式露出来
+      pStat.classList.toggle('mini', on);             // 只留 CPU/内存/费用
+      // 温度图的 svg 是 viewBox + preserveAspectRatio=none，换容器自己会重排，不用重画
+      // 画布藏着的时候量到的尺寸是 0，露出来之后得重新量一次 viewBox
+      if (on){
+        if (window.__inkFit)   setTimeout(window.__inkFit, 0);
+        if (window.__initView) setTimeout(window.__initView, 0);   // 视图原点居中
+      }
+    }
+
+    chip.addEventListener('click', () => apply(!on));
+    window.__canvasMode = apply;
+    // 调试用：地址后面带 ?canvas 就直接开进画布模式（省得每次手点一下）
+    if (location.search.indexOf('canvas') >= 0) setTimeout(() => apply(true), 0);
+  })();
+
+
+
+
+
+  // ── 时钟 + elapsed ────────────────────────────────────────────
+  setInterval(() => {
+    $('tClock').textContent = new Date().toTimeString().slice(0, 8);
+    if (S.t0){
+      const s = Math.round((Date.now() - S.t0) / 1000);
+      $('rElapsed').textContent = Math.floor(s/60) + 'm ' + (s%60) + 's';
+    }
+  }, 1000);
+
+  // ── 点依据角标（结论末尾那排 / 正文里由 [[eN]] 渲染出来的）→ 左栏对应那条高亮 ──
+  chatEl.addEventListener('click', e => {
+    const el = e.target.closest('.ref, .cite');
+    if (!el) return;
+    const r = el.dataset.r;
+    chatEl.querySelectorAll('.ref.on, .cite.on').forEach(x => x.classList.remove('on'));
+    el.classList.add('on');
+    const items = [...flowEl.querySelectorAll('.li')];
+    items.forEach(it => it.classList.remove('hl'));
+    const t = items.find(it => it.dataset.r === r);
+    if (t){
+      t.classList.add('hl');
+      t.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  });
+
+  // ── 收尾按钮：记忆 → 关对话 →（退服务 | 开新对话）─────────────
+  const btnRest = $('btnRest'), btnFresh = $('btnFresh'), actState = $('actState');
+  let acting = false;
+
+  function actMsg(txt, cls){
+    actState.className = 'actState' + (cls ? ' ' + cls : '');
+    actState.textContent = txt;
+  }
+
+  async function finish(action){
+    if (acting) return;
+    acting = true;
+    btnRest.disabled = btnFresh.disabled = true;
+    actMsg('正在写记忆 …（要读记忆库、写文件、改索引，可能要一两分钟）');
+    try {
+      const r = await fetch('/api/finish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+      if (!r.ok){
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.err || ('HTTP ' + r.status));
+      }
+    } catch (err){
+      actMsg('没发出去：' + err.message, 'er');
+      acting = false;
+      btnRest.disabled = btnFresh.disabled = false;
+    }
+  }
+  btnRest.onclick  = () => finish('rest');
+  btnFresh.onclick = () => finish('fresh');
+
+  // 上下文告警弹窗的两个按钮
+  $('cwOk').onclick    = () => $('ctxWarn').classList.remove('on');
+  $('cwFresh').onclick = () => { $('ctxWarn').classList.remove('on'); finish('fresh'); };
+
+  // ── 中断当前任务（等价终端里按 Esc）───────────────────────────
+  $('btnStop').onclick = async () => {
+    try {
+      const r = await fetch('/api/interrupt', { method: 'POST' });
+      const j = await r.json();
+      raw('user', j.ok ? 'wr' : 'er', j.ok ? '已发中断' : ('中断未生效：' + (j.err || '?')));
+    } catch (err){
+      raw('user', 'er', '中断失败：' + esc(err.message));
+    }
+  };
+</script>
+
+<script src="addons/canvas/canvas.js"></script>
+<!-- 上下文水位告警：到 CTX_WARN 弹一次；「换个新会话」直接复用收尾那条路 -->
+<div id="ctxWarn">
+  <div class="cwbox">
+    <div class="cwt">⚠ 上下文快满了</div>
+    <div class="cwm" id="ctxWarnMsg"></div>
+    <div class="cwa">
+      <button class="cwbtn go" id="cwFresh">换个新会话</button>
+      <button class="cwbtn" id="cwOk">知道了</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

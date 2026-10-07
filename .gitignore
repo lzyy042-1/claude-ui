@@ -1,0 +1,33 @@
+# ── 打包产物：重新打包会自己生成 ──
+build/
+dist/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ── ⚠️ 你自己画布上的东西 —— 这是**内容**，不是代码，别推上去 ──
+#    canvas.json 里是笔迹坐标、工作区名字和标签；
+#    canvas-files/ 是图片本体。都是私人的。
+canvas.json
+canvas-files/
+exports/
+
+# ── 运行痕迹 ──
+*.log
+
+# ── 拆改之前的备份目录（本机回滚用，不进仓库）──
+_backup_*/
+
+# ── 本地配置：里面会有你的路径、会话 id ──
+claude-ui.config.json
+.claude-ui.json
+
+# ── 编辑器 / 系统 ──
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
